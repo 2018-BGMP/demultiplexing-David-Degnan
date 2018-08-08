@@ -1,0 +1,105 @@
+David Degnan
+
+**Define the problem:**
+
+	The problem is that each read in a read file has an index in an index file that needs
+to be put in its own read_index file (demultiplexing). We will end up with 50 files for
+the 24 indexes (read 1 and 2) and 2 unknown (read 1 and 2). It will also report the
+number of properly matched indexes (per index) and any index hopping observed.
+	
+**Determine/describe what output would be informative:**
+
+	An outputted tsv with the raw number of matched indices, the raw number of index
+hops, and percentages for both matched indices and index hopping percentage. 	
+
+**Write examples (unit tests!):** 
+
+	Examples for fastq input files and an appropriately outputted TSV file were made. 
+The TSV file contains the number of FASTQ files that should be made (only notes for the
+tester, not in the actual algorithm). They have been included with the items turned in 
+for this github assignment.
+
+**Develop your algorithm using pseudocode:**
+
+	initialize a list with all [barcode sequence: barcode ID,...]
+	initializes a dictionary with {barcode matches : #,...}
+
+
+	Open R1 (read 1), R2 (index 1), R3 (index 2), R4 (read 2)
+	For line in file / while read
+	index1Pass = False
+	index2Pass = False
+	grab lines 2 and 4 of R2
+	--> any N's, lower than Q25 score, not 8 nucleotides
+	if passes:
+		index1Pass = True
+		save Index1_sequence as a variable (Iseq1)
+	grab lines 2 and 4 of R3
+	--> any N's, lower than Q25 score, not 8 nucleotides
+	if passes
+		index2Pass = True
+		save Index2_sequence as a variable (Iseq2)
+	if index1 == False or index2 == False:
+		grab lines 1-4 of R1
+		append to R1 unknowns
+		grab lines 1-4 of R2
+		append to R2 unknowns
+	elif index1Pass == True and index2Pass == True:
+	use list to obtain barcode1 and barcode2 for Iseq1 and Iseq2
+	make a variable called comparison with barcode1_barcode2
+	grab lines 1-4 of R1, adding comparison to Qname
+	grab lines 1-4 of R4, adding comparison to Qname
+	if barcode1 == barcode2:
+		append R1 data to R1_barcodeID file
+		append R4 data to R2_barcodeID file
+	else:
+		append R1 mismatches to R1_mismatches
+		append R4 mismatches to R2_mismatches
+	if comparison not in dict:
+		add to dict and set it to 1
+	else:
+		where it is in dict, add 1
+	
+	after the dictionary and files have been generated:
+	output a tsv with Index pair, index sequence 1, index sequence 2, number of records, and percent of total reads
+	Calculate the percentage by adding up all the reads and divided by the total
+
+**Determine high level functions:**
+
+	**Description**	
+		The pseudocode can be broken up into five phases: 1. Creating a list with barcodes
+	and sequences, initializing an empty dictionary, and opening the four files; 2. checking
+	if index 1 and index 2 pass the requirements (no N's, no Qscore lower than 25, and 
+	exactly 8 nucleotides); 3. sorting the output based on index quality and barcode matches
+	(pass index quality & barcode match --> index_read.fastq; pass index quality & barcodes
+	don't match --> mismatch_read.fastq; fail index quality --> unknowns_read.fastq); 
+	4. appending all barcode1_barcode2 (comparison of indices) to Qnames and to the dictionary
+	to keep a running count of every type of match/mismatch; and 5. creating an output tsv
+	with the number of matches/mismatches for each comparison of indices
+	and percent total of reads. 
+
+	**Function headers/Return statement:**
+	
+	def convertPhred(symbol):
+	'''Converts a symbol to a Phred score'''
+	return Phred score
+	
+	def makeTSV(dict, list):
+	'''makes a TSV file with output kept in dictionary and list in seq'''
+	
+	The main algorithm will (see description) will call these two functions. 
+
+	**Test examples for individual functions:**
+	
+	assert convert_phred("I") == 40, "Convert phred not working"
+	assert convert_phred("C") == 34, "Convert phred not working"
+	assert convert_phred("2") == 17, "Convert phred not working"
+	
+	makeTSV({"A1_A1":5, "A1_A2": 1, "B1_B1":3, "B1_B2":1})
+	expectedOutput:
+	Index_Pair	Seq1	Seq2	Number_of_Records	Percent_of_total_reads
+	A1_A1	AAAAAAAA	AAAAAAAA	5	50%
+	A1_A2	AAAAAAAA	AAAAAAAT	1	10%
+	B1_B1	CCCCCCCC	CCCCCCCC	3	30%
+	B1_B2	CCCCCCCC	CCCCCCCG	1	10%
+

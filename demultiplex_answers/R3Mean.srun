@@ -1,0 +1,12 @@
+#!/usr/bin/bash
+#SBATCH --partition=short
+#SBATCH --job-name=R3graph   
+#SBATCH --output=R3graph.txt         
+#SBATCH --error=R3graph.err
+#SBATCH --time=0-23:00:00
+#SBATCH --nodes=1              
+#SBATCH --ntasks-per-node=4
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=ddegnan@uoregon.edu
+
+/projects/bgmp/ddegnan/demultiplex/getMeanTable.py -f /projects/bgmp/shared/2017_sequencing/1294_S1_L008_R3_001.fastq.gz -o /projects/bgmp/ddegnan/demultiplex/R3Stats.tsv

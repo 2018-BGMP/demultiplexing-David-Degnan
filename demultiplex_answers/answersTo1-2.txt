@@ -1,0 +1,30 @@
+David "the Handsome" Degnan
+
+b. What is a good quality score cutoff for index reads and pairs to utilize for sample
+identification and downstream analysis, respectively?
+
+Since the lowest average quality score was 30, I believe 25 is a good quality score
+cutoff value (which is approximately 3 errors for every 1000 bases). This value is 
+supported by literature (Johnson and Slatkin 2006).
+
+c. How many indexes have Undetermined (N) base calls? (Utilize your command line
+tool knowledge. Submit the command you used. CHALLENGE: use a one-line command)
+
+File_Name	Index	#_undertermined_base_calls
+1294_S1_L008_R1_002.fastq.gz	index1	3976613
+1294_S1_L008_R1_003.fastq.gz	index2	3328051
+
+**Commands for Unix** 
+zcat 1294_S1_L008_R2_001.fastq.gz | sed -n '2~4p' | grep -E "N" | wc -l 
+zcat 1294_S1_L008_R3_001.fastq.gz | sed -n '2~4p' | grep -E "N" | wc -l 
+
+**Challenge**
+zcat 1294_S1_L008_R[2,3]* | sed -n '2~4p' | grep -E "N" | wc -l 
+
+
+References
+
+Johnson, Philip L. F., and Montgomery Slatkin. 2006. “Inference of Population Genetic 
+	Parameters in Metagenomics: A Clean Look at Messy Data.” Genome Research
+	16 (10): 1320–27. https://doi.org/10.1101/gr.5431206.
+

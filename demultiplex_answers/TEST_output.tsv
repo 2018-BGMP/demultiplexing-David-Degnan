@@ -1,0 +1,15 @@
+*SEQ1 FROM READ1 DOES NOT PASS QUALITY TEST --> SHOULD NOT APPEAR IN OUTPUT TABLE
+*BARCODE2 FROM INDEX1 DOES NOT PASS QUALITY TEST --> SHOULD NOT APPEAR IN OUTPUT TABLE
+*THIS TEST FILE HAS NO INSTANCES OF INDEX SWAPPING, BUT BARCODE 3 AND 4 CAN EASILY
+BE SWITCHED FOR THAT TEST. THIS IS A BASIC TESTER.
+
+*6 FASTQ files should be made: Read1_Barcode3.fastq, Read2_Barcode3.fastq, 
+Read1_Barcode4.fastq, Read2_Barcode4.fastq, Read1_unknowns.fastq, and 
+Read2_unknowns.fastq.
+
+*This tester is designed to be initially simple, and modifications can be made to it 
+to test various things such as multiple record counts, index swapping, etc. 
+
+Index_pair	index_sequence_1	index_sequence_2	#records	%total reads
+Barcode3_Barcode3	GGGGGGGG	GGGGGGGG	1	50
+Barcode4_Barcode4	TTTTTTTT	TTTTTTTT	1	50
