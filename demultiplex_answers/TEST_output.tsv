@@ -11,5 +11,5 @@ Read2_unknowns.fastq.
 to test various things such as multiple record counts, index swapping, etc. 
 
 Index_pair	index_sequence_1	index_sequence_2	#records	%total reads
-Barcode3_Barcode3	GGGGGGGG	GGGGGGGG	1	50
-Barcode4_Barcode4	TTTTTTTT	TTTTTTTT	1	50
+Barcode3_Barcode3	GGGGGGGG	GGGGGGGG	1	50%
+Barcode4_Barcode4	TTTTTTTT	TTTTTTTT	1	50%
