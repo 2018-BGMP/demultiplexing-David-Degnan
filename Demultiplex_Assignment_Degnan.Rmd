@@ -1,0 +1,338 @@
+---
+title: "Demultiplex Assignment"
+author: "David Degnan"
+date: "October 15th, 2018"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<br/ >
+
+## PART 1: DEMULTIPLEXER Script
+
+<br/ >
+
+### Important Script Info
+
+* This script and associated barcodes are specific to the "1294_S1_L008_R1_001.fastq.gz" data set (and associated R2, R3, and R4).
+
+* Any barcodes that fail quality control metrics (not 8 nucleotides, average Phred score less than 25, and any N's) were placed with their associated sequences in an "Unknowns" file and designated with a "Index pair filed qc" in the Qname.
+
+* Likewise, any sequences that failed quality control metrics (average Phred score less than 25) were placed in an "Unknowns" file with a "Sequence pair failed qc" in the Qname. Note that if one index/sequence failed in a pair, both reads counted as failed and were placed in Unknowns. 
+
+### Script Validation
+
+* All Read1 and Read2 files have the same number of lines (matched barcodes, Unknowns, mismatches).
+
+* An expected 2,905,973,880 lines are expected (total size of the two paired end files) between all the generated files which is what we see here. 
+
+```{r echo = FALSE}
+fileLengths = read.table("./FileLengths.txt", header = T)
+knitr::kable(fileLengths, caption = "Total lines of R1 and R2 files")
+```
+
+### Raw Demultiplexer Script
+
+```{r engine='python', eval = FALSE}
+#!/usr/bin/python
+#
+import argparse
+import gzip
+#
+# Associate the sequence and barcode name
+barcodes = {"GTAGCGTA":"B1", "CGATCGAT":"A5", "GATCAAGG":"C1", "AACAGCGA":"B9", 
+"TAGCCATG":"C9", "CGGTAATC":"C3", "CTCTGGAT":"B3", "TACCGGAT":"C4", 
+"CTAGCTCA":"A11", "CACTTCAC":"C7", "GCTACTCT":"B2", "ACGATCAG":"A1", 
+"TATGGCAC":"B7", "TGTTCCGT":"A3", "GTCCTAAG":"B4", "TCGACAAG":"A12", 
+"TCTTCGAC":"C10", "ATCATGCG":"A2", "ATCGTGGT":"C2", "TCGAGAGT":"A10",
+"TCGGATTC":"B8", "GATCTTGC":"A7", "AGAGTCCA":"B10", "AGGATAGC":"A8"}
+#
+# Keep record of all the match file states
+openFiles = {"B1":"closed", "A5":"closed", "C1":"closed", "B9":"closed", 
+"C9":"closed", "C3":"closed", "B3":"closed",
+"C4":"closed", "A11":"closed", "C7":"closed", "B2":"closed", "A1":"closed", 
+"B7":"closed", "A3":"closed", "B4":"closed",
+"A12":"closed", "C10":"closed", "A2":"closed", "C2":"closed", 
+"A10":"closed", "B8":"closed", "A7":"closed", "B10":"closed",
+"A8":"closed"}
+#
+# Keep track of all opened matched files
+matches = {}
+#
+#
+def get_arguments():
+    '''Takes 4 FASTQ file and demultiplexes. F1 is Read1, F2 is Index1, F3 
+    is Index2, and F4 is Read2.'''
+    parser = argparse.ArgumentParser(description = "Demultiplexing File Inputs")
+    parser.add_argument("-R", "--R1", help= "Designates the Read1 File", required=True, type=str)
+    parser.add_argument("-I", "--I1", help= "Designates the Index1 File", required=True, type=str)
+    parser.add_argument("-J", "--I2", help= "Designates the Index2 File", required=True, type=str)
+    parser.add_argument("-S", "--R2", help= "Designates the Read2 File", required=True, type=str)
+    return parser.parse_args()
+#
+#
+def openPreliminaryFiles(R1, I1, I2, R2):
+    '''Opens the original 4 FASTQ files with reads and indices, and 
+    generates 2 Unknown and 2 Mismatch files.'''
+    File1 = R1
+    File2 = I1
+    File3 = I2
+    File4 = R2
+    Read1 = gzip.open(File1, mode="rt")
+    Read2 = gzip.open(File2, mode="rt")
+    Read3 = gzip.open(File3, mode="rt")
+    Read4 = gzip.open(File4, mode="rt")
+    Unk1 = open("R1_Unknowns.fastq", "a")
+    Unk2 = open("R2_Unknowns.fastq", "a")
+    Mis1 = open("R1_Mismatches.fastq", "a")
+    Mis2 = open("R2_Mismatches.fastq", "a")
+    return Read1, Read2, Read3, Read4, Unk1, Unk2, Mis1, Mis2 
+#
+#
+def Length_and_NCheck(Seq):
+    '''Determines if the length is exactly 8 nucleotides and if there are 
+    N's in the barcode.'''
+    if len(Seq) != 8 or "N" in Seq:
+        TestPass = False
+    else:
+        TestPass = True
+    return TestPass
+#
+#
+def AverageQualityScore(QS):
+    '''Determines if the average quality score < 25'''
+    TotalScore = 0
+    for score in QS:
+        TotalScore += ord(score) - 33
+    averageScore = TotalScore / len(QS)
+    if averageScore < 25:
+        TestPass = False
+    else:
+        TestPass = True
+    return TestPass
+#
+#
+def QualityControl(fh):
+    '''Reads in the next three lines in a FASTQ file after the header and 
+    tests for length, N's and average quality score > 25'''
+    TestPass = True
+    Seq = fh.readline().strip("\n")
+    fh.readline()
+    QS = fh.readline().strip("\n")
+    if TestPass == True:
+        TestPass = Length_and_NCheck(Seq)
+    if TestPass == True:
+        TestPass = AverageQualityScore(QS)
+    return TestPass, Seq
+#
+#
+def SeqRevComp(Seq):
+    '''Creates the complement sequence'''
+    # Reverses the sequence
+    RevComp = ""
+    Seq = Seq[::-1]
+    for base in range(len(Seq)):
+        if Seq[base] == "A":
+            RevComp += "T"
+        elif Seq[base] == "C":
+            RevComp += "G"
+        elif Seq[base] == "T":
+            RevComp += "A"
+        elif Seq[base] == "G":
+            RevComp += "C"
+    return RevComp
+#
+#
+def grabLinesTestAndWrite(Read, NextRead, IndexPair, Filename1, Filename2, Unk1, Unk2):
+    '''Takes the first four lines of a file and writes to its barcoded file,
+    assuming the quality score is greater than 25. Otherwise, its goes to
+    unknowns.'''
+    Qname1 = Read.readline().strip("\n")
+    Qname1 = Qname1 + ":" + IndexPair + "\n"
+    RSeq1 = Read.readline()
+    Plus1 = Read.readline()
+    Phred1 = Read.readline()
+    
+    Qname2 = NextRead.readline().strip("\n")
+    Qname2 = Qname2 + ":" + IndexPair + "\n"
+    RSeq2 = NextRead.readline()
+    Plus2 = NextRead.readline()
+    Phred2 = NextRead.readline()
+  
+    if AverageQualityScore(Phred1) == False or AverageQualityScore(Phred2) == False:
+        Qname1 = Qname1.strip("\n") + ": Sequence pair failed qc\n"
+        Qname2 = Qname2.strip("\n") + ": Sequence pair failed qc\n"
+        Filename1 = Unk1
+        Filename2 = Unk2
+        
+    ToWrite1 = Qname1 + RSeq1 + Plus1 + Phred1
+    ToWrite2 = Qname2 + RSeq2 + Plus2 + Phred2
+    Filename1.write(ToWrite1)
+    Filename2.write(ToWrite2)
+
+   
+def NameMatchFiles(Bar1):
+    '''Creates the name and opens the files for matches'''
+    R1BName = "R1" + "_" + Bar1 + ".fastq"
+    R2BName = "R2" + "_" + Bar1 + ".fastq"
+    R1BFile = open(R1BName, "a")
+    R2BFile = open(R2BName, "a")
+    return R1BFile, R2BFile
+               
+def main():
+    args = get_arguments()
+    R1 = args.R1
+    I1 = args.I1
+    I2 = args.I2
+    R2 = args.R2
+
+    Read1, Read2, Read3, Read4, Unk1, Unk2, Mis1, Mis2 = openPreliminaryFiles(R1, I1, I2, R2)
+    while True:
+        Index1Header = Read2.readline()
+        if not Index1Header:
+            break
+        Index1Pass, Index1Seq = QualityControl(Read2)
+        Index2Header = Read3.readline()
+        if not Index2Header:
+            break
+        Index2Pass, Index2Seq = QualityControl(Read3)
+        Index2Seq = SeqRevComp(Index2Seq)
+        if Index1Pass == True and Index2Pass == True \
+        and Index1Seq in barcodes and Index2Seq in barcodes: 
+            Bar1 = barcodes[Index1Seq]
+            Bar2 = barcodes[Index2Seq]
+            BarPair = Bar1 + "_" + Bar2
+            if Bar1 == Bar2:
+                if openFiles[Bar1] == "closed":
+                    openFiles[Bar1] = "open"
+                    R1BFile, R2BFile = NameMatchFiles(Bar1)
+                    grabLinesTestAndWrite(Read1, Read4, BarPair, R1BFile, R2BFile, Unk1, Unk2)
+                    matches[Bar1] = [R1BFile, R2BFile]
+                elif openFiles[Bar1] == "open":
+                    R1BFile = matches[Bar1][0]
+                    R2BFile = matches[Bar1][1]
+                    grabLinesTestAndWrite(Read1, Read4, BarPair, R1BFile, R2BFile, Unk1, Unk2)
+            else: 
+                grabLinesTestAndWrite(Read1, Read4, BarPair, Mis1, Mis2, Unk1, Unk2)
+        else:
+            IndexPair = Index1Seq + "_" + Index2Seq + ": Index pair failed qc"
+            grabLinesTestAndWrite(Read1, Read4, IndexPair, Unk1, Unk2, Unk1, Unk2)   
+    for key in matches.keys():
+        File1 = matches[key][0]
+        File2 = matches[key][1]
+        File1.close()
+        File2.close()
+       
+main()
+
+```
+
+### Sbatch Script
+
+```{r engine='bash', eval=FALSE}
+Read1=/projects/bgmp/shared/2017_sequencing/1294_S1_L008_R1_001.fastq.gz
+Read2=/projects/bgmp/shared/2017_sequencing/1294_S1_L008_R4_001.fastq.gz
+Index1=/projects/bgmp/shared/2017_sequencing/1294_S1_L008_R2_001.fastq.gz
+Index2=/projects/bgmp/shared/2017_sequencing/1294_S1_L008_R3_001.fastq.gz
+
+cd /projects/bgmp/ddegnan/demultiplex/ 
+./Demultiplexer.py -R $Read1 -S $Read2 -I $Index1 -J $Index2
+```
+
+* 20 cores were used and the program ran for 5 hours from 7pm-12am on Saturday, October 13th, 2018. 
+
+<br/ >
+
+## PART 2: DEMULTIPLEXING Statistics
+
+<br/ >
+
+### 1. The number of reads per file for Read1 was calculated and stored as Reads.txt and mismatched barcodes were stored (Bash)
+
+```{r, engine='bash', eval=FALSE}
+grep -v "Mismatches" | grep -v "R2" | grep -v "Unknown" | cat *.fastq | \
+grep -E "^+$" | wc -l >> Reads.txt
+
+cat R1_Mismatches.fastq | grep -E "@K00337" | cut -d ":" -f11 | sort \
+| uniq -c | sort -r > AllMismatches.txt 
+```
+
+### 2. Generate Stats Table to determine the proportion of each read pair.
+
+Step One: Combine the Reads and AllMismatches files (R)
+
+```{r message=FALSE}
+# Edit Reads file so that it can be merged with the matches file
+ReadNums <- read.table("./Reads.txt")
+matches <- c("A10_A10", "A11_A11", "A12_A12", "A1_A1", "A2_A2", "A3_A3", 
+             "A4_A4", "A7_A7", "A8_A8", "B10_B10", "B1_B1", "B2_B2", 
+             "B3_B3", "B4_B4", "B7_B7", "B8_B8", "B9_B9", "C10_C10", 
+             "C1_C1", "C2_C2", "C3_C3", "C4_C4", "C7_C7", "C9_C9")
+ReadNums <- data.frame(ReadNums[1], matches)
+colnames(ReadNums) <- c("Number", "MatchOrMismatch")
+
+# Edit Mismatches file so that it can be merged with Reads file
+Mismatches <- read.table("./AllMismatches.txt")
+colnames(Mismatches) <- c("Number", "MatchOrMismatch")
+
+# Merge files
+Total <- rbind(ReadNums, Mismatches)
+
+# Output the table
+Total <- Total[,2:1]
+write.table(Total, "Total.txt", quote=F, row.names=F, sep="\t")
+```
+
+Step Two: Add Barcode Sequences (Python)
+
+```{r engine = 'python', eval = FALSE}
+sequences = {"B1":"GTAGCGTA","B3":"CTCTGGAT","A3":"TGTTCCGT","B8":"TCGGATTC",
+"A5": "CGATCGAT","C4": "TACCGGAT","B4": "GTCCTAAG","A7": "GATCTTGC",
+"C1": "GATCAAGG","A11": "CTAGCTCA","A12": "TCGACAAG","B10": "AGAGTCCA",
+"B9": "AACAGCGA","C7": "CACTTCAC","C10": "TCTTCGAC","A8": "AGGATAGC",
+"C9": "TAGCCATG","B2": "GCTACTCT","A2": "ATCATGCG","C3": "CGGTAATC",
+"A1": "ACGATCAG","C2": "ATCGTGGT","B7": "TATGGCAC","A10": "TCGAGAGT"}
+
+toPrint = ["MatchOrMismatch\tNumber\tBar1Seq\tBar2Seq\n"]
+
+with open("../demultiplexing-David-Degnan/Total.txt", "r") as fh:
+        fh.readline()
+        for line in fh:
+            line = line.split()
+            toWrite = line[0] + "\t" + line[1]
+            barcodes = line[0].split("_")
+            FirBar = barcodes[0]
+            SecBar = barcodes[1]
+            toWrite = toWrite + "\t" + sequences[FirBar] + "\t" + sequences[SecBar] + "\n"
+            toPrint.append(toWrite)
+
+with open("TotalwSeq.txt", "w") as ofh:
+    for line in range(len(toPrint)):
+        ofh.write(toPrint[line])
+```
+
+Step Three: Add Proportions (R). Unknowns are removed from data set.
+
+```{r}
+Total <- read.table("./TotalwSeq.txt", header = T)
+Proportion <- format(round(Total$Number / sum(Total$Number), 8))
+Total <- data.frame(Total[,1], Total[,3], Total[,4], Total[,2], Proportion)
+colnames(Total) <- c("MatchOrMismatch", "Bar1Seq", "Bar2Seq", "Number", 
+                     "Proportion")
+Total <- Total[order(Total$Number, decreasing=TRUE),]
+```
+
+
+* The total proportion of unknown reads (ones that failed the quality control) was 0.1351601 or 49,096,461 read pairs of the 363,246,735 read pairs.
+
+* The total proportion of mismatches was 0.001629953 which means that index hopping occured 0.163% of the time. The number of reads which had index hopping was in 592,075 read pairs of the total 363,246,735 read pairs.
+
+* Index hopping is definitely an issue to take into consideration when processing Illumina data, as it occured in quite a few samples. Included below is the all the cases of index hopping in a table.
+
+```{r echo = FALSE}
+knitr::kable(Total[,1:5], caption = "Proportion of Matches/Mismatches", row.names = FALSE)
+```
